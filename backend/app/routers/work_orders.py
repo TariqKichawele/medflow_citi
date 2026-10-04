@@ -14,14 +14,14 @@ from app.schemas import (
     WorkOrderOut,
     WorkOrderUpdate,
 )
-from app.services.query import allowed_technician_status_transition, paginate
+from app.services.query import allowed_technician_status_transition, apply_sort, paginate
 from app.services.storage import save_report_file
 
 router = APIRouter(prefix="/work-orders", tags=["work-orders"])
 
 
 def _visible_work_orders(current: User):
-    stmt = select(WorkOrder).order_by(WorkOrder.id.asc())
+    stmt = select(WorkOrder)
     if current.role == ROLE_FIELD_TECHNICIAN:
         stmt = stmt.where(WorkOrder.technician_id == current.id)
     return stmt
@@ -41,6 +41,8 @@ def list_work_orders(
     status_filter: str | None = Query(default=None, alias="status"),
     technician_id: int | None = None,
     equipment_id: int | None = None,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
     db: Session = Depends(db_session),
     current: User = Depends(get_current_user),
 ) -> WorkOrderList:
@@ -53,6 +55,19 @@ def list_work_orders(
         stmt = stmt.where(WorkOrder.technician_id == technician_id)
     if equipment_id is not None:
         stmt = stmt.where(WorkOrder.equipment_id == equipment_id)
+    stmt = apply_sort(
+        stmt,
+        {
+            "id": WorkOrder.id,
+            "title": WorkOrder.title,
+            "priority": WorkOrder.priority,
+            "status": WorkOrder.status,
+            "equipment_id": WorkOrder.equipment_id,
+            "technician_id": WorkOrder.technician_id,
+        },
+        sort_by,
+        sort_dir,
+    )
     items, total = paginate(stmt, db, page, page_size)
     return WorkOrderList(items=items, total=total, page=page, page_size=page_size)
 

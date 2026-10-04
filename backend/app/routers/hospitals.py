@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.deps import db_session, get_current_user, require_admin
 from app.models import Equipment, Hospital, User
 from app.schemas import HospitalCreate, HospitalList, HospitalOut, HospitalUpdate
-from app.services.query import paginate
+from app.services.query import apply_sort, paginate
 
 router = APIRouter(prefix="/hospitals", tags=["hospitals"])
 
@@ -16,12 +16,26 @@ def list_hospitals(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     search: str | None = None,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
     db: Session = Depends(db_session),
     _: User = Depends(get_current_user),
 ) -> HospitalList:
-    stmt = select(Hospital).order_by(Hospital.id.asc())
+    stmt = select(Hospital)
     if search:
         stmt = stmt.where(Hospital.name.ilike(f"%{search}%"))
+    stmt = apply_sort(
+        stmt,
+        {
+            "id": Hospital.id,
+            "name": Hospital.name,
+            "location_region": Hospital.location_region,
+            "capacity": Hospital.capacity,
+            "supervisor_id": Hospital.supervisor_id,
+        },
+        sort_by,
+        sort_dir,
+    )
     items, total = paginate(stmt, db, page, page_size)
     return HospitalList(items=items, total=total, page=page, page_size=page_size)
 

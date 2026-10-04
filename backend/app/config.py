@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     jwt_secret: str = "local-dev-only-change-me-use-setup-script"
     jwt_expire_minutes: int = 480
     jwt_algorithm: str = "HS256"
-    cors_origins: str = "http://localhost:5173"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     storage_backend: str = "local"
     upload_dir: str = "uploads"
     seed_force: str = "0"

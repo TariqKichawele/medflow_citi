@@ -7,13 +7,13 @@ from app.constants import ROLE_FIELD_TECHNICIAN
 from app.deps import db_session, get_current_user, require_admin
 from app.models import Equipment, User, WorkOrder
 from app.schemas import EquipmentCreate, EquipmentList, EquipmentOut, EquipmentUpdate
-from app.services.query import paginate, technician_equipment_ids
+from app.services.query import apply_sort, paginate, technician_equipment_ids
 
 router = APIRouter(prefix="/equipment", tags=["equipment"])
 
 
 def _visible_equipment_stmt(db: Session, current: User):
-    stmt = select(Equipment).order_by(Equipment.id.asc())
+    stmt = select(Equipment)
     if current.role == ROLE_FIELD_TECHNICIAN:
         allowed = technician_equipment_ids(db, current.id, current.facility_id)
         if not allowed:
@@ -30,6 +30,8 @@ def list_equipment(
     search: str | None = None,
     status_filter: str | None = Query(default=None, alias="status"),
     facility_id: int | None = None,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
     db: Session = Depends(db_session),
     current: User = Depends(get_current_user),
 ) -> EquipmentList:
@@ -41,6 +43,19 @@ def list_equipment(
         stmt = stmt.where(Equipment.status == status_filter)
     if facility_id is not None:
         stmt = stmt.where(Equipment.facility_id == facility_id)
+    stmt = apply_sort(
+        stmt,
+        {
+            "id": Equipment.id,
+            "serial_number": Equipment.serial_number,
+            "model": Equipment.model,
+            "status": Equipment.status,
+            "charge_level": Equipment.charge_level,
+            "facility_id": Equipment.facility_id,
+        },
+        sort_by,
+        sort_dir,
+    )
     items, total = paginate(stmt, db, page, page_size)
     return EquipmentList(items=items, total=total, page=page, page_size=page_size)
 

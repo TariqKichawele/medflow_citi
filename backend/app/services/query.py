@@ -1,8 +1,24 @@
-from sqlalchemy import Select, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import Select, asc, desc, func, select
+from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from app.constants import ROLE_FIELD_TECHNICIAN, WO_IN_PROGRESS, WO_PENDING
 from app.models import Equipment, WorkOrder
+
+
+def apply_sort(
+    stmt: Select,
+    columns: dict[str, InstrumentedAttribute],
+    sort_by: str | None,
+    sort_dir: str | None,
+    default: str = "id",
+) -> Select:
+    field = sort_by if sort_by in columns else default
+    column = columns[field]
+    direction = (sort_dir or "asc").lower()
+    if direction not in ("asc", "desc"):
+        direction = "asc"
+    order = desc(column) if direction == "desc" else asc(column)
+    return stmt.order_by(order, columns[default].asc())
 
 
 def paginate(stmt: Select, db: Session, page: int, page_size: int) -> tuple[list, int]:

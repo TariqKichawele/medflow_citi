@@ -8,7 +8,7 @@ from app.deps import db_session, get_current_user, require_admin
 from app.models import User
 from app.schemas import UserCreate, UserList, UserOut, UserUpdate
 from app.security import hash_password
-from app.services.query import paginate, require_technician_facility
+from app.services.query import apply_sort, paginate, require_technician_facility
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -19,17 +19,33 @@ def list_users(
     page_size: int = Query(20, ge=1, le=100),
     search: str | None = None,
     role: str | None = None,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
     db: Session = Depends(db_session),
     current: User = Depends(get_current_user),
 ) -> UserList:
     if current.role not in (ROLE_CLINICAL_ADMIN, ROLE_AUDITOR):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
-    stmt = select(User).order_by(User.id.asc())
+    stmt = select(User)
     if search:
         like = f"%{search}%"
         stmt = stmt.where(or_(User.full_name.ilike(like), User.email.ilike(like)))
     if role:
         stmt = stmt.where(User.role == role)
+    stmt = apply_sort(
+        stmt,
+        {
+            "id": User.id,
+            "email": User.email,
+            "full_name": User.full_name,
+            "role": User.role,
+            "facility_id": User.facility_id,
+            "reports_to_id": User.reports_to_id,
+            "is_active": User.is_active,
+        },
+        sort_by,
+        sort_dir,
+    )
     items, total = paginate(stmt, db, page, page_size)
     return UserList(items=items, total=total, page=page, page_size=page_size)
 

@@ -1,10 +1,10 @@
 # MedFlow
 
-Centralized clinical equipment command center for Halcyon Health Systems. This repository currently ships the FastAPI backend and local Docker PostgreSQL database. The React UI and AWS deploy come later.
+Centralized clinical equipment command center for Halcyon Health Systems. This repository ships the FastAPI backend, local Docker PostgreSQL database, and a React (Vite) + Material UI command center. AWS deploy comes later.
 
 ## Local setup
 
-Requires Python 3.10+, Docker Desktop (daemon running), and (later) Node.js for the frontend.
+Requires Python 3.10+, Docker Desktop (daemon running), and Node.js 20+.
 
 ```bash
 chmod +x bin/setup.sh bin/seed.sh
@@ -24,6 +24,27 @@ uvicorn app.main:app --reload
 
 - Health: [http://localhost:8000/health](http://localhost:8000/health)
 - OpenAPI: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+Start the UI (in a second terminal):
+
+```bash
+cd frontend
+cp .env.example .env
+npm install
+npm run dev
+```
+
+The command center is at [http://localhost:5173](http://localhost:5173). Leave `VITE_API_BASE_URL` empty so Vite proxies `/api` and `/uploads` to the API on port 8000.
+
+### UI by role
+
+| Screen | Clinical admin | Field technician | Auditor |
+| --- | --- | --- | --- |
+| Dashboard | yes | yes | yes |
+| Equipment / hospitals / work orders | full CRUD | read scoped data; status + report upload on assigned orders | read-only |
+| Users | full CRUD (deactivate instead of hard delete) | hidden | read-only |
+
+List grids support server-side pagination, search, status/role filters, and column sorting (`sort_by` / `sort_dir` on the API).
 
 ## Demo accounts
 
@@ -92,4 +113,5 @@ bin/seed.sh
 docker-compose.yml
 backend/app/          # FastAPI app, models, schemas, routers, analytics
 backend/alembic/      # SQLAlchemy 2 / Postgres migrations
+frontend/             # Vite + React + MUI command center
 ```
