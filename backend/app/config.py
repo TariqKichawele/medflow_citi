@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     )
 
     database_url: str = "postgresql+psycopg://medflow:medflow@localhost:5432/medflow"
-    jwt_secret: str = "local-dev-only-change-me-use-setup-script"
+    jwt_secret: str = "secret"
     jwt_expire_minutes: int = 480
     jwt_algorithm: str = "HS256"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
