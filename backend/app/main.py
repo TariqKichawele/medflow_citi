@@ -9,7 +9,7 @@ from app.routers import analytics, auth, equipment, hospitals, users, work_order
 from app.schemas.analytics import HealthResponse
 
 app = FastAPI(
-    title="MedFlow Clinical Equipment Command Center",
+    title="MedFlow Equipment Command Center",
     version="0.1.0",
     description="Halcyon Health Systems equipment, work order, and analytics API.",
 )
