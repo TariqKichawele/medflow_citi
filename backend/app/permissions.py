@@ -1,17 +1,3 @@
-"""Named permissions and the built-in role grants.
-
-Permissions live in this module and are referenced by the enum everywhere else.
-Role grants are rows in ``roles`` / ``role_permissions``, not branches in endpoint
-code. A table is used instead of a dict so an admin can introduce a role by
-writing data: no endpoint changes, and a fresh database gets the three built-in
-roles from seed and from the migration. ``get_current_user`` loads the caller's
-role and its grants on every request, so editing a role applies on the next
-call without reissuing tokens.
-
-There is no separate audit-history resource. The auditor's read grants are the
-operational records that role could already read.
-"""
-
 from enum import Enum
 
 from app.constants import ROLE_AUDITOR, ROLE_CLINICAL_ADMIN, ROLE_FIELD_TECHNICIAN

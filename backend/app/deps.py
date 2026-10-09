@@ -92,7 +92,7 @@ def require_permission(permission: Permission) -> Callable[[User], User]:
             )
         return user
 
-    checker.permission_dependency = True  # type: ignore[attr-defined]
+    checker.permission_dependency = True  
     return checker
 
 
@@ -105,7 +105,7 @@ def require_any_permission(*permissions: Permission) -> Callable[[User], User]:
             )
         return user
 
-    checker.permission_dependency = True  # type: ignore[attr-defined]
+    checker.permission_dependency = True 
     return checker
 
 
@@ -118,5 +118,5 @@ def require_self_or_permission(permission: Permission) -> Callable[..., User]:
             )
         return user
 
-    checker.permission_dependency = True  # type: ignore[attr-defined]
+    checker.permission_dependency = True 
     return checker
