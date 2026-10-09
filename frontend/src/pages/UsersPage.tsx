@@ -24,6 +24,8 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { StatusChip } from '../components/StatusChip'
 import { ROLE_CLINICAL_ADMIN, ROLE_FIELD_TECHNICIAN, ROLES } from '../constants'
 import { useAuth } from '../auth/AuthContext'
+import { Permission } from '../permissions'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useLookups } from '../hooks/useLookups'
 
 const EMPTY: UserWrite = {
@@ -37,12 +39,30 @@ const EMPTY: UserWrite = {
 }
 
 export function UsersPage() {
-  const { user } = useAuth()
-  const canWrite = user?.role === ROLE_CLINICAL_ADMIN
+  const { can } = useAuth()
+  const canWrite = can(Permission.userManage)
+  const [roleOptions, setRoleOptions] = useState<string[]>([...ROLES])
+
+  useEffect(() => {
+    if (!can(Permission.roleRead)) return
+    let cancelled = false
+    void api.roles
+      .list()
+      .then((roles) => {
+        if (!cancelled) setRoleOptions(roles.map((row) => row.name))
+      })
+      .catch(() => {
+        /* the built-in names stay available for the filter */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [can])
   const { hospitals, hospitalName, userName, reload, users } = useLookups()
   const [rows, setRows] = useState<User[]>([])
   const [total, setTotal] = useState(0)
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebouncedValue(search)
   const [role, setRole] = useState('')
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({ page: 0, pageSize: 20 })
   const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'id', sort: 'asc' }])
@@ -59,7 +79,7 @@ export function UsersPage() {
       const result = await api.users.list({
         page: paginationModel.page + 1,
         page_size: paginationModel.pageSize,
-        search,
+        search: debouncedSearch,
         role: role || undefined,
         sort_by: sort?.field,
         sort_dir: sort?.sort ?? 'asc',
@@ -72,7 +92,7 @@ export function UsersPage() {
     } finally {
       setLoading(false)
     }
-  }, [paginationModel, sortModel, search, role])
+  }, [paginationModel, sortModel, debouncedSearch, role])
 
   useEffect(() => {
     void load()
@@ -199,7 +219,7 @@ export function UsersPage() {
           value={search}
           onChange={(event) => {
             setSearch(event.target.value)
-            setPaginationModel((model) => ({ ...model, page: 0 }))
+            setPaginationModel((model) => (model.page === 0 ? model : { ...model, page: 0 }))
           }}
         />
         <FormControl size="small" sx={{ minWidth: 180 }}>
@@ -213,7 +233,7 @@ export function UsersPage() {
             }}
           >
             <MenuItem value="">All</MenuItem>
-            {ROLES.map((value) => (
+            {roleOptions.map((value) => (
               <MenuItem key={value} value={value}>
                 {value.replaceAll('_', ' ')}
               </MenuItem>
@@ -228,6 +248,7 @@ export function UsersPage() {
         loading={loading}
         paginationMode="server"
         sortingMode="server"
+        filterMode="server"
         paginationModel={paginationModel}
         onPaginationModelChange={setPaginationModel}
         sortModel={sortModel}
@@ -264,7 +285,7 @@ export function UsersPage() {
                 value={form.role}
                 onChange={(event) => setForm({ ...form, role: event.target.value as Role })}
               >
-                {ROLES.map((value) => (
+                {roleOptions.map((value) => (
                   <MenuItem key={value} value={value}>
                     {value.replaceAll('_', ' ')}
                   </MenuItem>

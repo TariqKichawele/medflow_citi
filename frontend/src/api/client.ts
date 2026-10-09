@@ -9,6 +9,7 @@ import type {
   Paged,
   ReportingLineItem,
   ServiceReport,
+  RoleRecord,
   User,
   UserWrite,
   WorkOrder,
@@ -81,6 +82,12 @@ export const api = {
   },
   me() {
     return request<User>('/api/v1/auth/me')
+  },
+  roles: {
+    list: () => request<RoleRecord[]>('/api/v1/roles'),
+    permissions: () => request<{ permissions: string[] }>('/api/v1/roles/permissions'),
+    create: (payload: { name: string; description: string; permissions: string[] }) =>
+      request<RoleRecord>('/api/v1/roles', { method: 'POST', body: JSON.stringify(payload) }),
   },
   users: {
     list: (params: ListQuery = {}) => request<Paged<User>>(`/api/v1/users${queryString(params)}`),

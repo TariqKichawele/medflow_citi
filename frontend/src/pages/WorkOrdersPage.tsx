@@ -29,8 +29,10 @@ import type {
 } from '../api/types'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { StatusChip } from '../components/StatusChip'
-import { PRIORITIES, ROLE_CLINICAL_ADMIN, ROLE_FIELD_TECHNICIAN, WORK_ORDER_STATUSES } from '../constants'
+import { PRIORITIES, ROLE_FIELD_TECHNICIAN, WORK_ORDER_STATUSES } from '../constants'
 import { useAuth } from '../auth/AuthContext'
+import { Permission } from '../permissions'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useLookups } from '../hooks/useLookups'
 
 const EMPTY: WorkOrderWrite = {
@@ -48,15 +50,19 @@ function nextStatuses(current: WorkOrderStatus): WorkOrderStatus[] {
 }
 
 export function WorkOrdersPage() {
-  const { user } = useAuth()
-  const canWrite = user?.role === ROLE_CLINICAL_ADMIN
-  const isTech = user?.role === ROLE_FIELD_TECHNICIAN
-  const { users, userName, hospitalName } = useLookups()
+  const { user, can } = useAuth()
+  const canWrite = can(Permission.workOrderWrite)
+  const canChangeStatus = can(Permission.workOrderStatus) && !canWrite
+  const canReadAllOrders = can(Permission.workOrderRead)
+  const canUploadReports = can(Permission.reportUpload)
+  const { users, hospitals, userName, hospitalName } = useLookups()
   const [equipment, setEquipment] = useState<Equipment[]>([])
   const [rows, setRows] = useState<WorkOrder[]>([])
   const [total, setTotal] = useState(0)
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebouncedValue(search)
   const [status, setStatus] = useState('')
+  const [facilityId, setFacilityId] = useState<number | ''>('')
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({ page: 0, pageSize: 20 })
   const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'id', sort: 'asc' }])
   const [loading, setLoading] = useState(false)
@@ -89,8 +95,9 @@ export function WorkOrdersPage() {
       const result = await api.workOrders.list({
         page: paginationModel.page + 1,
         page_size: paginationModel.pageSize,
-        search,
+        search: debouncedSearch,
         status: status || undefined,
+        facility_id: facilityId === '' ? undefined : facilityId,
         sort_by: sort?.field,
         sort_dir: sort?.sort ?? 'asc',
       })
@@ -102,7 +109,7 @@ export function WorkOrdersPage() {
     } finally {
       setLoading(false)
     }
-  }, [paginationModel, sortModel, search, status])
+  }, [paginationModel, sortModel, debouncedSearch, status, facilityId])
 
   useEffect(() => {
     void load()
@@ -185,9 +192,11 @@ export function WorkOrdersPage() {
         width: 280,
         renderCell: (params) => (
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
-            <Button size="small" onClick={() => void openReports(params.row)}>
-              Reports
-            </Button>
+            {can(Permission.reportRead) ? (
+              <Button size="small" onClick={() => void openReports(params.row)}>
+                Reports
+              </Button>
+            ) : null}
             {canWrite ? (
               <>
                 <Button size="small" onClick={() => openEdit(params.row)}>
@@ -198,7 +207,7 @@ export function WorkOrdersPage() {
                 </Button>
               </>
             ) : null}
-            {isTech
+            {canChangeStatus && (canReadAllOrders || params.row.technician_id === user?.id)
               ? nextStatuses(params.row.status).map((next) => (
                   <Button key={next} size="small" variant="outlined" onClick={() => void advance(params.row, next)}>
                     {next.replaceAll('_', ' ')}
@@ -209,7 +218,7 @@ export function WorkOrdersPage() {
         ),
       },
     ],
-    [canWrite, isTech, equipment, hospitalName, userName],
+    [can, canWrite, canChangeStatus, canReadAllOrders, user, equipment, hospitalName, userName],
   )
 
   function openCreate() {
@@ -255,10 +264,12 @@ export function WorkOrdersPage() {
     }
   }
 
-  const canUpload =
+  const canUpload = Boolean(
     selected &&
-    user &&
-    (user.role === ROLE_CLINICAL_ADMIN || (isTech && selected.technician_id === user.id))
+      user &&
+      canUploadReports &&
+      (canReadAllOrders || selected.technician_id === user.id),
+  )
 
   return (
     <Box>
@@ -277,12 +288,12 @@ export function WorkOrdersPage() {
       ) : null}
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 2 }}>
         <TextField
-          label="Search title"
+          label="Search title, serial, or model"
           size="small"
           value={search}
           onChange={(event) => {
             setSearch(event.target.value)
-            setPaginationModel((model) => ({ ...model, page: 0 }))
+            setPaginationModel((model) => (model.page === 0 ? model : { ...model, page: 0 }))
           }}
         />
         <FormControl size="small" sx={{ minWidth: 180 }}>
@@ -303,6 +314,25 @@ export function WorkOrdersPage() {
             ))}
           </Select>
         </FormControl>
+        <FormControl size="small" sx={{ minWidth: 200 }}>
+          <InputLabel>Hospital</InputLabel>
+          <Select
+            label="Hospital"
+            value={facilityId}
+            onChange={(event) => {
+              const next = String(event.target.value)
+              setFacilityId(next === '' ? '' : Number(next))
+              setPaginationModel((model) => (model.page === 0 ? model : { ...model, page: 0 }))
+            }}
+          >
+            <MenuItem value="">All</MenuItem>
+            {hospitals.map((row) => (
+              <MenuItem key={row.id} value={row.id}>
+                {row.name}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
       </Stack>
       <DataGrid
         rows={rows}
@@ -311,6 +341,7 @@ export function WorkOrdersPage() {
         loading={loading}
         paginationMode="server"
         sortingMode="server"
+        filterMode="server"
         paginationModel={paginationModel}
         onPaginationModelChange={setPaginationModel}
         sortModel={sortModel}
@@ -405,7 +436,7 @@ export function WorkOrdersPage() {
             reports.map((report) => (
               <Box key={report.id} sx={{ mb: 1.5 }}>
                 <Link href={resolveFileUrl(report.file_url)} target="_blank" rel="noreferrer">
-                  {report.file_url.split('/').pop()}
+                  {decodeURIComponent((report.file_url.split('/').pop() ?? 'report').split('?')[0])}
                 </Link>
                 <Typography variant="caption" sx={{ display: 'block' }}>
                   {new Date(report.created_at).toLocaleString()} {report.notes ? `· ${report.notes}` : ''}

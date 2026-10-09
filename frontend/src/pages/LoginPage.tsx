@@ -10,6 +10,7 @@ import Typography from '@mui/material/Typography'
 import { useState, type FormEvent } from 'react'
 
 import { useAuth } from '../auth/AuthContext'
+import { ThemeToggle } from '../components/ThemeToggle'
 import { DEMO_PASSWORD } from '../constants'
 
 export function LoginPage() {
@@ -37,8 +38,11 @@ export function LoginPage() {
   }
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', py: 8 }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', py: 4 }}>
       <Container maxWidth="md">
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <ThemeToggle color="primary" />
+        </Box>
         <Stack spacing={3}>
           <Box>
             <Typography variant="overline" color="secondary">

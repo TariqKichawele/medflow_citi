@@ -1,20 +1,55 @@
 from collections.abc import Callable, Generator
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import InvalidTokenError
-from sqlalchemy.orm import Session
+from sqlalchemy import Select
+from sqlalchemy.orm import InstrumentedAttribute, Session
 
-from app.constants import ROLE_CLINICAL_ADMIN, ROLE_FIELD_TECHNICIAN
+from app.constants import MAX_PAGE_SIZE
 from app.database import get_db
 from app.models import User
+from app.permissions import Permission, has_permission, missing_permission_detail
 from app.security import decode_access_token
+from app.services.query import ListQueryError, apply_sort, paginate
+from app.services.roles import permissions_for_role_name
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def db_session() -> Generator[Session, None, None]:
     yield from get_db()
+
+
+class ListParams:
+    def __init__(
+        self,
+        page: int = Query(1, ge=1),
+        page_size: int = Query(20, ge=1, le=MAX_PAGE_SIZE),
+        sort_by: str | None = Query(default=None),
+        sort_dir: str | None = Query(default=None),
+    ) -> None:
+        self.page = page
+        self.page_size = page_size
+        self.sort_by = sort_by
+        self.sort_dir = sort_dir
+
+
+def run_list(
+    stmt: Select,
+    db: Session,
+    columns: dict[str, InstrumentedAttribute],
+    params: ListParams,
+    default: str = "id",
+) -> tuple[list, int]:
+    try:
+        ordered = apply_sort(stmt, columns, params.sort_by, params.sort_dir, default)
+        return paginate(ordered, db, params.page, params.page_size)
+    except ListQueryError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
 
 
 def get_current_user(
@@ -44,26 +79,44 @@ def get_current_user(
             detail="Inactive or missing user",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    user.granted_permissions = permissions_for_role_name(db, user.role)
     return user
 
 
-def require_roles(*roles: str) -> Callable[[User], User]:
+def require_permission(permission: Permission) -> Callable[[User], User]:
     def checker(user: User = Depends(get_current_user)) -> User:
-        if user.role not in roles:
+        if not has_permission(user, permission):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions",
+                detail=missing_permission_detail(permission),
             )
         return user
 
+    checker.permission_dependency = True  # type: ignore[attr-defined]
     return checker
 
 
-def require_admin(user: User = Depends(require_roles(ROLE_CLINICAL_ADMIN))) -> User:
-    return user
+def require_any_permission(*permissions: Permission) -> Callable[[User], User]:
+    def checker(user: User = Depends(get_current_user)) -> User:
+        if not any(has_permission(user, permission) for permission in permissions):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=missing_permission_detail(*permissions),
+            )
+        return user
+
+    checker.permission_dependency = True  # type: ignore[attr-defined]
+    return checker
 
 
-def technician_or_admin(
-    user: User = Depends(require_roles(ROLE_CLINICAL_ADMIN, ROLE_FIELD_TECHNICIAN)),
-) -> User:
-    return user
+def require_self_or_permission(permission: Permission) -> Callable[..., User]:
+    def checker(user_id: int, user: User = Depends(get_current_user)) -> User:
+        if user.id != user_id and not has_permission(user, permission):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=missing_permission_detail(permission),
+            )
+        return user
+
+    checker.permission_dependency = True  # type: ignore[attr-defined]
+    return checker

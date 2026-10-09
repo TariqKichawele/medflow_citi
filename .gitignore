@@ -5,7 +5,9 @@ __pycache__/
 .mypy_cache/
 .env
 backend/.env
+backend/.env.aws
 backend/uploads/
+build/
 *.egg-info/
 .DS_Store
 dist/

@@ -1,39 +1,47 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.constants import ROLE_AUDITOR, ROLE_CLINICAL_ADMIN, ROLE_FIELD_TECHNICIAN
-from app.deps import db_session, get_current_user, require_admin
-from app.models import User
-from app.schemas import UserCreate, UserList, UserOut, UserUpdate
+from app.deps import (
+    ListParams,
+    db_session,
+    require_permission,
+    require_self_or_permission,
+    run_list,
+)
+from app.models import Role, User
+from app.permissions import Permission
+from app.schemas import Page, UserCreate, UserOut, UserUpdate
 from app.security import hash_password
-from app.services.query import apply_sort, paginate, require_technician_facility
+from app.services.query import require_technician_facility
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-@router.get("", response_model=UserList)
+def _require_known_role(db: Session, role_name: str) -> None:
+    found = db.scalar(select(Role.id).where(Role.name == role_name))
+    if found is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Unknown role '{role_name}'")
+
+
+@router.get("", response_model=Page[UserOut])
 def list_users(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    params: ListParams = Depends(),
     search: str | None = None,
     role: str | None = None,
-    sort_by: str | None = None,
-    sort_dir: str | None = None,
     db: Session = Depends(db_session),
-    current: User = Depends(get_current_user),
-) -> UserList:
-    if current.role not in (ROLE_CLINICAL_ADMIN, ROLE_AUDITOR):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+    _: User = Depends(require_permission(Permission.USER_READ)),
+) -> Page[UserOut]:
     stmt = select(User)
     if search:
         like = f"%{search}%"
         stmt = stmt.where(or_(User.full_name.ilike(like), User.email.ilike(like)))
     if role:
         stmt = stmt.where(User.role == role)
-    stmt = apply_sort(
+    items, total = run_list(
         stmt,
+        db,
         {
             "id": User.id,
             "email": User.email,
@@ -43,21 +51,17 @@ def list_users(
             "reports_to_id": User.reports_to_id,
             "is_active": User.is_active,
         },
-        sort_by,
-        sort_dir,
+        params,
     )
-    items, total = paginate(stmt, db, page, page_size)
-    return UserList(items=items, total=total, page=page, page_size=page_size)
+    return Page[UserOut](items=items, total=total, page=params.page, page_size=params.page_size)
 
 
 @router.get("/{user_id}", response_model=UserOut)
 def get_user(
     user_id: int,
     db: Session = Depends(db_session),
-    current: User = Depends(get_current_user),
+    _: User = Depends(require_self_or_permission(Permission.USER_READ)),
 ) -> User:
-    if current.role == ROLE_FIELD_TECHNICIAN and current.id != user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -68,8 +72,9 @@ def get_user(
 def create_user(
     payload: UserCreate,
     db: Session = Depends(db_session),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_permission(Permission.USER_MANAGE)),
 ) -> User:
+    _require_known_role(db, payload.role)
     try:
         require_technician_facility(payload.role, payload.facility_id)
     except ValueError as exc:
@@ -98,7 +103,7 @@ def update_user(
     user_id: int,
     payload: UserUpdate,
     db: Session = Depends(db_session),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_permission(Permission.USER_MANAGE)),
 ) -> User:
     user = db.get(User, user_id)
     if user is None:
@@ -111,6 +116,7 @@ def update_user(
         setattr(user, key, value)
     if password:
         user.hashed_password = hash_password(password)
+    _require_known_role(db, user.role)
     try:
         require_technician_facility(user.role, user.facility_id)
     except ValueError as exc:
@@ -129,7 +135,7 @@ def update_user(
 def deactivate_user(
     user_id: int,
     db: Session = Depends(db_session),
-    current: User = Depends(require_admin),
+    current: User = Depends(require_permission(Permission.USER_MANAGE)),
 ) -> None:
     user = db.get(User, user_id)
     if user is None:

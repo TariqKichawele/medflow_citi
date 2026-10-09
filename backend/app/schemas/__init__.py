@@ -1,17 +1,28 @@
 from datetime import datetime
+from typing import Generic, TypeVar
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_serializer, field_validator
 
 from app.constants import (
     EQUIPMENT_STATUSES,
     PRIORITIES,
-    ROLES,
     WORK_ORDER_STATUSES,
 )
+from app.permissions import Permission
 
 
 class ORMModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+
+
+T = TypeVar("T")
+
+
+class Page(BaseModel, Generic[T]):
+    items: list[T]
+    total: int
+    page: int
+    page_size: int
 
 
 class LoginRequest(BaseModel):
@@ -36,8 +47,8 @@ class UserCreate(BaseModel):
     @field_validator("role")
     @classmethod
     def role_ok(cls, value: str) -> str:
-        if value not in ROLES:
-            raise ValueError(f"must be one of {ROLES}")
+        if not value.strip():
+            raise ValueError("must not be empty")
         return value
 
 
@@ -53,8 +64,8 @@ class UserUpdate(BaseModel):
     @field_validator("role")
     @classmethod
     def role_ok(cls, value: str | None) -> str | None:
-        if value is not None and value not in ROLES:
-            raise ValueError(f"must be one of {ROLES}")
+        if value is not None and not value.strip():
+            raise ValueError("must not be empty")
         return value
 
 
@@ -68,11 +79,30 @@ class UserOut(ORMModel):
     is_active: bool
 
 
-class UserList(BaseModel):
-    items: list[UserOut]
-    total: int
-    page: int
-    page_size: int
+class MeOut(UserOut):
+    permissions: list[str]
+
+
+class PermissionCatalog(BaseModel):
+    permissions: list[str]
+
+
+class RoleCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=50, pattern=r"^[a-z][a-z0-9_]*$")
+    description: str = Field(default="", max_length=255)
+    permissions: list[Permission] = Field(default_factory=list)
+
+
+class RoleUpdate(BaseModel):
+    description: str | None = Field(default=None, max_length=255)
+    permissions: list[Permission] | None = None
+
+
+class RoleOut(BaseModel):
+    id: int
+    name: str
+    description: str
+    permissions: list[str]
 
 
 class HospitalCreate(BaseModel):
@@ -95,13 +125,6 @@ class HospitalOut(ORMModel):
     location_region: str
     capacity: int
     supervisor_id: int | None
-
-
-class HospitalList(BaseModel):
-    items: list[HospitalOut]
-    total: int
-    page: int
-    page_size: int
 
 
 class EquipmentCreate(BaseModel):
@@ -141,13 +164,6 @@ class EquipmentOut(ORMModel):
     status: str
     charge_level: int
     facility_id: int
-
-
-class EquipmentList(BaseModel):
-    items: list[EquipmentOut]
-    total: int
-    page: int
-    page_size: int
 
 
 class WorkOrderCreate(BaseModel):
@@ -214,13 +230,6 @@ class WorkOrderOut(ORMModel):
     technician_id: int
 
 
-class WorkOrderList(BaseModel):
-    items: list[WorkOrderOut]
-    total: int
-    page: int
-    page_size: int
-
-
 class ServiceReportOut(ORMModel):
     id: int
     work_order_id: int
@@ -229,9 +238,9 @@ class ServiceReportOut(ORMModel):
     created_at: datetime
     uploaded_by_id: int
 
+    @field_serializer("file_url")
+    def serialize_file_url(self, value: str) -> str:
+        from app.services.storage import public_file_url
 
-class ServiceReportList(BaseModel):
-    items: list[ServiceReportOut]
-    total: int
-    page: int
-    page_size: int
+        return public_file_url(value)
+

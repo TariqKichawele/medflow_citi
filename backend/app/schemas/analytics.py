@@ -78,3 +78,13 @@ class AnalyticsSummary(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
+
+
+class DependencyStatus(BaseModel):
+    status: str
+
+
+class HealthDetailResponse(BaseModel):
+    status: str
+    database: DependencyStatus
+    s3: DependencyStatus

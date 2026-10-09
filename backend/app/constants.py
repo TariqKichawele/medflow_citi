@@ -32,3 +32,5 @@ TERMINAL_WORK_ORDER_STATUSES = (WO_COMPLETED, WO_FAILED)
 ALLOWED_REPORT_EXTENSIONS = {".txt", ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp"}
 
 DEMO_PASSWORD = "Medflow123!"
+
+MAX_PAGE_SIZE = 100

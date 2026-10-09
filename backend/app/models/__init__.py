@@ -77,7 +77,7 @@ class Equipment(Base):
     model: Mapped[str] = mapped_column(String(150), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     charge_level: Mapped[int] = mapped_column(Integer, nullable=False)
-    facility_id: Mapped[int] = mapped_column(ForeignKey("hospitals.id"), nullable=False)
+    facility_id: Mapped[int] = mapped_column(ForeignKey("hospitals.id"), nullable=False, index=True)
 
     facility: Mapped["Hospital"] = relationship(back_populates="equipment")
     work_orders: Mapped[list["WorkOrder"]] = relationship(back_populates="equipment")
@@ -90,8 +90,8 @@ class WorkOrder(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     priority: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-    equipment_id: Mapped[int] = mapped_column(ForeignKey("equipment.id"), nullable=False)
-    technician_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    equipment_id: Mapped[int] = mapped_column(ForeignKey("equipment.id"), nullable=False, index=True)
+    technician_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
 
     equipment: Mapped["Equipment"] = relationship(back_populates="work_orders")
     technician: Mapped["User"] = relationship(back_populates="work_orders")
@@ -114,3 +114,29 @@ class ServiceReport(Base):
 
     work_order: Mapped["WorkOrder"] = relationship(back_populates="service_reports")
     uploaded_by: Mapped["User"] = relationship(back_populates="service_reports")
+
+
+class Role(Base):
+    __tablename__ = "roles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    description: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+
+    grants: Mapped[list["RolePermission"]] = relationship(
+        back_populates="role",
+        cascade="all, delete-orphan",
+    )
+
+
+class RolePermission(Base):
+    __tablename__ = "role_permissions"
+    __table_args__ = (
+        UniqueConstraint("role_id", "permission", name="uq_role_permissions_role_permission"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    role_id: Mapped[int] = mapped_column(ForeignKey("roles.id", ondelete="CASCADE"), nullable=False, index=True)
+    permission: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    role: Mapped["Role"] = relationship(back_populates="grants")

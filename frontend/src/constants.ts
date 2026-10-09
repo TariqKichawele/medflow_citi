@@ -1,6 +1,7 @@
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 
 export const TOKEN_KEY = 'medflow_token'
+export const COLOR_MODE_KEY = 'medflow_color_mode'
 
 export const ROLE_CLINICAL_ADMIN = 'clinical_admin'
 export const ROLE_FIELD_TECHNICIAN = 'field_technician'

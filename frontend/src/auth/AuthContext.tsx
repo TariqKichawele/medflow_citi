@@ -9,6 +9,7 @@ type AuthContextValue = {
   loading: boolean
   login: (email: string, password: string) => Promise<void>
   logout: () => void
+  can: (permission: string) => boolean
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
@@ -49,9 +50,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }, [])
 
+  const can = useCallback(
+    (permission: string) => Boolean(user?.permissions?.includes(permission)),
+    [user],
+  )
+
   const value = useMemo(
-    () => ({ user, loading, login, logout }),
-    [user, loading, login, logout],
+    () => ({ user, loading, login, logout, can }),
+    [user, loading, login, logout, can],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

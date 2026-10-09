@@ -2,23 +2,23 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { api, fetchAll } from '../api/client'
 import type { Hospital, User } from '../api/types'
-import { ROLE_AUDITOR, ROLE_CLINICAL_ADMIN } from '../constants'
+import { Permission } from '../permissions'
 import { useAuth } from '../auth/AuthContext'
 
 export function useLookups() {
-  const { user } = useAuth()
+  const { user, can } = useAuth()
   const [hospitals, setHospitals] = useState<Hospital[]>([])
   const [users, setUsers] = useState<User[]>([])
 
   const reload = useCallback(async () => {
     const hospitalRows = await fetchAll(api.hospitals.list)
     setHospitals(hospitalRows)
-    if (user && (user.role === ROLE_CLINICAL_ADMIN || user.role === ROLE_AUDITOR)) {
+    if (can(Permission.userRead)) {
       setUsers(await fetchAll(api.users.list))
     } else if (user) {
       setUsers([user])
     }
-  }, [user])
+  }, [user, can])
 
   useEffect(() => {
     void reload()

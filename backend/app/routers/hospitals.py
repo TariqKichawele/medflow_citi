@@ -1,31 +1,29 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.deps import db_session, get_current_user, require_admin
+from app.deps import ListParams, db_session, require_permission, run_list
+from app.permissions import Permission
 from app.models import Equipment, Hospital, User
-from app.schemas import HospitalCreate, HospitalList, HospitalOut, HospitalUpdate
-from app.services.query import apply_sort, paginate
+from app.schemas import HospitalCreate, HospitalOut, HospitalUpdate, Page
 
 router = APIRouter(prefix="/hospitals", tags=["hospitals"])
 
 
-@router.get("", response_model=HospitalList)
+@router.get("", response_model=Page[HospitalOut])
 def list_hospitals(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    params: ListParams = Depends(),
     search: str | None = None,
-    sort_by: str | None = None,
-    sort_dir: str | None = None,
     db: Session = Depends(db_session),
-    _: User = Depends(get_current_user),
-) -> HospitalList:
+    _: User = Depends(require_permission(Permission.HOSPITAL_READ)),
+) -> Page[HospitalOut]:
     stmt = select(Hospital)
     if search:
         stmt = stmt.where(Hospital.name.ilike(f"%{search}%"))
-    stmt = apply_sort(
+    items, total = run_list(
         stmt,
+        db,
         {
             "id": Hospital.id,
             "name": Hospital.name,
@@ -33,18 +31,16 @@ def list_hospitals(
             "capacity": Hospital.capacity,
             "supervisor_id": Hospital.supervisor_id,
         },
-        sort_by,
-        sort_dir,
+        params,
     )
-    items, total = paginate(stmt, db, page, page_size)
-    return HospitalList(items=items, total=total, page=page, page_size=page_size)
+    return Page[HospitalOut](items=items, total=total, page=params.page, page_size=params.page_size)
 
 
 @router.get("/{hospital_id}", response_model=HospitalOut)
 def get_hospital(
     hospital_id: int,
     db: Session = Depends(db_session),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_permission(Permission.HOSPITAL_READ)),
 ) -> Hospital:
     hospital = db.get(Hospital, hospital_id)
     if hospital is None:
@@ -56,7 +52,7 @@ def get_hospital(
 def create_hospital(
     payload: HospitalCreate,
     db: Session = Depends(db_session),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_permission(Permission.HOSPITAL_WRITE)),
 ) -> Hospital:
     hospital = Hospital(**payload.model_dump())
     db.add(hospital)
@@ -70,7 +66,7 @@ def update_hospital(
     hospital_id: int,
     payload: HospitalUpdate,
     db: Session = Depends(db_session),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_permission(Permission.HOSPITAL_WRITE)),
 ) -> Hospital:
     hospital = db.get(Hospital, hospital_id)
     if hospital is None:
@@ -86,7 +82,7 @@ def update_hospital(
 def delete_hospital(
     hospital_id: int,
     db: Session = Depends(db_session),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_permission(Permission.HOSPITAL_WRITE)),
 ) -> None:
     hospital = db.get(Hospital, hospital_id)
     if hospital is None:

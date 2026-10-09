@@ -21,6 +21,8 @@ import type { Hospital, HospitalWrite } from '../api/types'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ROLE_CLINICAL_ADMIN } from '../constants'
 import { useAuth } from '../auth/AuthContext'
+import { Permission } from '../permissions'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useLookups } from '../hooks/useLookups'
 
 const EMPTY: HospitalWrite = {
@@ -31,12 +33,13 @@ const EMPTY: HospitalWrite = {
 }
 
 export function HospitalsPage() {
-  const { user } = useAuth()
-  const canWrite = user?.role === ROLE_CLINICAL_ADMIN
+  const { can } = useAuth()
+  const canWrite = can(Permission.hospitalWrite)
   const { users, userName, reload } = useLookups()
   const [rows, setRows] = useState<Hospital[]>([])
   const [total, setTotal] = useState(0)
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebouncedValue(search)
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({ page: 0, pageSize: 20 })
   const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'id', sort: 'asc' }])
   const [loading, setLoading] = useState(false)
@@ -54,7 +57,7 @@ export function HospitalsPage() {
       const result = await api.hospitals.list({
         page: paginationModel.page + 1,
         page_size: paginationModel.pageSize,
-        search,
+        search: debouncedSearch,
         sort_by: sort?.field,
         sort_dir: sort?.sort ?? 'asc',
       })
@@ -66,7 +69,7 @@ export function HospitalsPage() {
     } finally {
       setLoading(false)
     }
-  }, [paginationModel, sortModel, search])
+  }, [paginationModel, sortModel, debouncedSearch])
 
   useEffect(() => {
     void load()
@@ -166,7 +169,7 @@ export function HospitalsPage() {
         sx={{ mb: 2 }}
         onChange={(event) => {
           setSearch(event.target.value)
-          setPaginationModel((model) => ({ ...model, page: 0 }))
+          setPaginationModel((model) => (model.page === 0 ? model : { ...model, page: 0 }))
         }}
       />
       <DataGrid
@@ -176,6 +179,7 @@ export function HospitalsPage() {
         loading={loading}
         paginationMode="server"
         sortingMode="server"
+        filterMode="server"
         paginationModel={paginationModel}
         onPaginationModelChange={setPaginationModel}
         sortModel={sortModel}

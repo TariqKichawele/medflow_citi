@@ -5,6 +5,24 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MedFlow Command Center</title>
+    <script>
+      (function () {
+        var mode = 'light'
+        try {
+          var stored = localStorage.getItem('medflow_color_mode')
+          if (stored === 'light' || stored === 'dark') mode = stored
+          else if (window.matchMedia('(prefers-color-scheme: dark)').matches) mode = 'dark'
+        } catch (e) {
+          try {
+            if (window.matchMedia('(prefers-color-scheme: dark)').matches) mode = 'dark'
+          } catch (err) {}
+        }
+        var root = document.documentElement
+        root.style.colorScheme = mode
+        root.style.backgroundColor = mode === 'dark' ? '#0e1517' : '#f3f6f7'
+        root.style.color = mode === 'dark' ? '#e8f2f2' : '#1a2b30'
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

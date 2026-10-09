@@ -3,6 +3,7 @@ import DevicesIcon from '@mui/icons-material/MedicalServices'
 import AssignmentIcon from '@mui/icons-material/Assignment'
 import DomainIcon from '@mui/icons-material/Domain'
 import PeopleIcon from '@mui/icons-material/People'
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 import LogoutIcon from '@mui/icons-material/Logout'
 import AppBar from '@mui/material/AppBar'
 import Box from '@mui/material/Box'
@@ -19,21 +20,28 @@ import Typography from '@mui/material/Typography'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 
 import { useAuth } from '../auth/AuthContext'
-import { ROLE_AUDITOR, ROLE_CLINICAL_ADMIN } from '../constants'
+import { ThemeToggle } from '../components/ThemeToggle'
+import { Permission } from '../permissions'
 
 const DRAWER_WIDTH = 240
 
 const NAV = [
-  { to: '/', label: 'Dashboard', icon: <DashboardIcon />, end: true },
-  { to: '/equipment', label: 'Equipment', icon: <DevicesIcon /> },
-  { to: '/work-orders', label: 'Work orders', icon: <AssignmentIcon /> },
-  { to: '/hospitals', label: 'Hospitals', icon: <DomainIcon /> },
+  { to: '/', label: 'Dashboard', icon: <DashboardIcon />, end: true, permissions: [Permission.analyticsRead] },
   {
-    to: '/users',
-    label: 'Users',
-    icon: <PeopleIcon />,
-    roles: [ROLE_CLINICAL_ADMIN, ROLE_AUDITOR],
+    to: '/equipment',
+    label: 'Equipment',
+    icon: <DevicesIcon />,
+    permissions: [Permission.equipmentRead, Permission.equipmentReadAssigned],
   },
+  {
+    to: '/work-orders',
+    label: 'Work orders',
+    icon: <AssignmentIcon />,
+    permissions: [Permission.workOrderRead, Permission.workOrderReadAssigned],
+  },
+  { to: '/hospitals', label: 'Hospitals', icon: <DomainIcon />, permissions: [Permission.hospitalRead] },
+  { to: '/users', label: 'Users', icon: <PeopleIcon />, permissions: [Permission.userRead] },
+  { to: '/roles', label: 'Roles', icon: <AdminPanelSettingsIcon />, permissions: [Permission.roleRead] },
 ]
 
 function roleLabel(role: string) {
@@ -44,7 +52,7 @@ function roleLabel(role: string) {
 }
 
 export function AppShell() {
-  const { user, logout } = useAuth()
+  const { user, logout, can } = useAuth()
   const location = useLocation()
 
   return (
@@ -54,15 +62,18 @@ export function AppShell() {
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
             MedFlow
           </Typography>
-          {user ? (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <Typography variant="body2">{user.full_name}</Typography>
-              <Chip size="small" color="secondary" label={roleLabel(user.role)} />
-              <Button color="inherit" startIcon={<LogoutIcon />} onClick={logout}>
-                Sign out
-              </Button>
-            </Box>
-          ) : null}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <ThemeToggle />
+            {user ? (
+              <>
+                <Typography variant="body2">{user.full_name}</Typography>
+                <Chip size="small" color="secondary" label={roleLabel(user.role)} />
+                <Button color="inherit" startIcon={<LogoutIcon />} onClick={logout}>
+                  Sign out
+                </Button>
+              </>
+            ) : null}
+          </Box>
         </Toolbar>
       </AppBar>
       <Drawer
@@ -74,7 +85,7 @@ export function AppShell() {
       >
         <Toolbar />
         <List>
-          {NAV.filter((item) => !item.roles || (user && item.roles.includes(user.role))).map(
+          {NAV.filter((item) => item.permissions.some((permission) => can(permission))).map(
             (item) => (
               <ListItemButton
                 key={item.to}

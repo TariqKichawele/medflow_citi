@@ -3,11 +3,11 @@ import Box from '@mui/material/Box'
 import CircularProgress from '@mui/material/CircularProgress'
 
 import { useAuth } from './AuthContext'
-import type { Role } from '../api/types'
 
-export function ProtectedRoute({ roles }: { roles?: Role[] }) {
-  const { user, loading } = useAuth()
+export function ProtectedRoute({ permission, anyOf }: { permission?: string; anyOf?: string[] }) {
+  const { user, loading, can } = useAuth()
   const location = useLocation()
+  const required = anyOf ?? (permission ? [permission] : [])
 
   if (loading) {
     return (
@@ -21,7 +21,7 @@ export function ProtectedRoute({ roles }: { roles?: Role[] }) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
 
-  if (roles && !roles.includes(user.role)) {
+  if (required.length > 0 && !required.some((item) => can(item))) {
     return <Navigate to="/" replace />
   }
 

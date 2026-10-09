@@ -1,4 +1,11 @@
-export type Role = 'clinical_admin' | 'field_technician' | 'auditor'
+export type Role = string
+
+export type RoleRecord = {
+  id: number
+  name: string
+  description: string
+  permissions: string[]
+}
 export type EquipmentStatus = 'available' | 'in_use' | 'maintenance' | 'offline'
 export type WorkOrderStatus = 'pending' | 'in_progress' | 'completed' | 'failed'
 export type Priority = 'low' | 'medium' | 'critical'
@@ -18,6 +25,7 @@ export type User = {
   facility_id: number | null
   reports_to_id: number | null
   is_active: boolean
+  permissions?: string[]
 }
 
 export type UserWrite = {

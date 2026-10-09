@@ -21,8 +21,10 @@ import { api } from '../api/client'
 import type { Equipment, EquipmentStatus, EquipmentWrite } from '../api/types'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { StatusChip } from '../components/StatusChip'
-import { EQUIPMENT_STATUSES, ROLE_CLINICAL_ADMIN } from '../constants'
+import { EQUIPMENT_STATUSES } from '../constants'
 import { useAuth } from '../auth/AuthContext'
+import { Permission } from '../permissions'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useLookups } from '../hooks/useLookups'
 
 const EMPTY: EquipmentWrite = {
@@ -34,12 +36,13 @@ const EMPTY: EquipmentWrite = {
 }
 
 export function EquipmentPage() {
-  const { user } = useAuth()
-  const canWrite = user?.role === ROLE_CLINICAL_ADMIN
+  const { can } = useAuth()
+  const canWrite = can(Permission.equipmentWrite)
   const { hospitals, hospitalName } = useLookups()
   const [rows, setRows] = useState<Equipment[]>([])
   const [total, setTotal] = useState(0)
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebouncedValue(search)
   const [status, setStatus] = useState('')
   const [facilityId, setFacilityId] = useState<number | ''>('')
   const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({ page: 0, pageSize: 20 })
@@ -57,7 +60,7 @@ export function EquipmentPage() {
       const result = await api.equipment.list({
         page: paginationModel.page + 1,
         page_size: paginationModel.pageSize,
-        search,
+        search: debouncedSearch,
         status: status || undefined,
         facility_id: facilityId === '' ? undefined : facilityId,
         sort_by: sort?.field,
@@ -71,7 +74,7 @@ export function EquipmentPage() {
     } finally {
       setLoading(false)
     }
-  }, [paginationModel, sortModel, search, status, facilityId])
+  }, [paginationModel, sortModel, debouncedSearch, status, facilityId])
 
   useEffect(() => {
     void load()
@@ -185,7 +188,7 @@ export function EquipmentPage() {
           value={search}
           onChange={(event) => {
             setSearch(event.target.value)
-            setPaginationModel((model) => ({ ...model, page: 0 }))
+            setPaginationModel((model) => (model.page === 0 ? model : { ...model, page: 0 }))
           }}
           size="small"
         />
@@ -234,6 +237,7 @@ export function EquipmentPage() {
         loading={loading}
         paginationMode="server"
         sortingMode="server"
+        filterMode="server"
         paginationModel={paginationModel}
         onPaginationModelChange={setPaginationModel}
         sortModel={sortModel}
